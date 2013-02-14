@@ -1,0 +1,472 @@
+<html>
+<head>
+    <title>Voronoi Diagram and Dleaunay Triangulation</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="style.css" />
+    <script type="text/javascript">
+        var pointColor = "#ff1493" , lineColor = "#111169" , backColor = "#ffeeff";
+        function drawPoint(p){
+            ctx.fillStyle = pointColor;
+            ctx.beginPath();
+            ctx.arc(p.x,p.y,2,0,2*Math.PI,true);
+            ctx.closePath();
+            ctx.fill();
+        }
+        function drawLine(p1 , p2){
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p1.x , p1.y);
+            ctx.lineTo(p2.x , p2.y);
+            ctx.closePath();
+            ctx.stroke();
+        }
+        function drawCircle(ct){
+            ctx.beginPath();
+            ctx.arc(ct.o.x , ct.o.y , ct.r , 0 , 2*Math.PI , false);
+            ctx.closePath();
+            ctx.stroke();
+        }
+        function cls(){
+            var canvas = document.getElementById("display");
+            ctx.clearRect(0,0,canvas.offsetWidth,canvas.offsetHeight);
+        }
+
+    </script>
+    <script type="text/javascript">
+        var pts = new Array();
+        var lines = new Array();
+        var circles = new Array();
+        var vorl = new Array();
+        var conv = new Array();
+        var vorout = new Array();
+
+        function min(a , b , c){
+            if(a<b && a<c)return a;
+            if(b<c)return b;
+            return c;
+        }
+        function min2(a , b , c){
+            if(a<b && b<c)return b;
+            if(a<c && c<b)return c;
+            return a;
+        }
+        function max(a , b , c){
+            if(a>b && a>c)return a;
+            if(b>c)return b;
+            return c;
+        }
+        function point(a , b){
+            this.x =a;
+            this.y =b;
+        }
+        function line(A , B){
+            this.a = A<B?A:B;
+            this.b = A<B?B:A;
+        }
+        function circle(A , B , C){
+            this.o = centerOf(pts[A] , pts[B] , pts[C]);
+            this.r = distance(pts[A] , this.o);
+            this.a = min(A , B , C);
+            this.b = min2(A , B , C);
+            this.c = max(A , B , C);
+        }
+        
+        function radius(a , b , c){
+            var u = centerOf(a , b , c);
+            var x = a.x - u.x , y = a.y - u.y;
+            return Math.sqrt(x*x+y*y);
+        }
+        function distance(a , b){
+            var x = a.x - b.x , y = a.y - b.y;
+            return Math.sqrt(x*x+y*y);
+        }
+        function centerOf(a , b , c){
+            var u = new point(0 , 0);
+            var d = 2*(a.x*(b.y-c.y)+b.x*(c.y-a.y)+c.x*(a.y-b.y));
+            var da = a.x*a.x+a.y*a.y , db = b.x*b.x+b.y*b.y , dc = c.x*c.x+c.y*c.y;
+            u.x = (da*(b.y-c.y)+db*(c.y-a.y)+dc*(a.y-b.y))/d;
+            u.y = -1*(da*(b.x-c.x)+db*(c.x-a.x)+dc*(a.x-b.x))/d;
+            return u;
+        }
+
+        function CCW(a , b , c){// State of point C in line ab
+            var bv = new point(0,0) , cv = new point(0,0);
+            bv.x = b.x - a.x;
+            bv.y = b.y - a.y; // ba vector
+            cv.x = c.x - a.x; cv.y = c.y - a.y; // ca vector
+            var crox = bv.x*cv.y - bv.y*cv.x;
+            if(crox >0)return -1;//Right of
+            if(crox <0)return  1;//Left  of
+            return 0;
+        }
+        function CH(){
+            var p , m=0 , n=0;
+            while(conv.length)conv.pop();
+            for(var i=1 ; i<pts.length ; i++)if(pts[i].y<pts[m].y)m =i;
+            conv.push(m);
+            while(1){
+                if(conv[conv.length-1]==0)n=1;
+                else n=0;
+                for(var i=0 ; i<pts.length ; i++)if(CCW(pts[conv[conv.length-1]],pts[n],pts[i])<0)n = i;
+                if(n == conv[0])break;
+                conv.push(n);
+            }
+            var l;
+            for(var c=0 ; c<conv.length ; c++){
+                l = new line(conv[c%conv.length] , conv[(c+1)%conv.length]);
+                lines.push(l);
+            }
+        }
+        function addToCircles(ct){
+            for(var i=0 ; i<circles.length ; i++){
+                if(ct.a==circles[i].a && ct.b==circles[i].b && ct.c==circles[i].c){
+                    delete ct;
+                    return false;
+                }
+            }
+            circles.push(ct);
+            return true;
+        }
+        function addToLines(a , b){
+            var l = new line(a , b);
+            for(var i=0 ; i<lines.length ; i++){
+                if(lines[i].a == l.a && lines[i].b == l.b){
+                    delete l;
+                    return false;
+                }
+            }
+            lines.push(l);
+            return true;
+        }
+        function Delaunay(){
+            var ct , flag = false , l = new line(0 , 0);
+            while(lines.length)lines.pop();
+            while(circles.length)circles.pop();
+            CH();
+            for(var i=0 ; i<lines.length ; i++){
+                for(var j=0 ; j<pts.length ; j++){
+                    if(j==lines[i].a || j==lines[i].b || CCW(pts[j],pts[lines[i].a],pts[lines[i].b])==0)continue;
+                    ct = new circle(lines[i].a , lines[i].b , j);
+                    flag = true;
+                    for(var c=0 ; c<pts.length ; c++){
+                        if(c==ct.a || c==ct.b || c==ct.c)continue;
+                        if(distance(ct.o,pts[c])<=ct.r){
+                            flag = false;
+                            break;
+                        }
+                    }
+                    if(flag){
+                        if(addToCircles(ct)){
+                            addToLines(lines[i].a , j);
+                            addToLines(lines[i].b , j);
+                            break;
+                        }
+                    }else{
+                        delete ct;
+                    }
+                }
+            }
+        }
+        function voronoi(){
+            while(vorl.length)vorl.pop();
+            while(vorout.length)vorout.pop();
+            if(pts.length==1)return;
+            var canvas = document.getElementById("display");
+            if(pts.length==2){
+                var m = (pts[0].x-pts[1].x)/(pts[1].y-pts[0].y);
+                var p = new point((pts[0].x+pts[1].x)/2,(pts[0].y+pts[1].y)/2)
+                var pt;
+                if(m<=1 && m>=-1){
+                    var w = canvas.offsetWidth;
+                    pt = new point(0,p.y-m*p.x);
+                    vorout.push(pt);
+                    pt = new point(w,p.y+m*(w-p.x));
+                    vorout.push(pt);
+                }else{
+                    var h = canvas.offsetHeight;
+                    pt = new point(p.x-p.y/m,0);
+                    vorout.push(pt);
+                    pt = new point(p.x+(h-p.y)/m,h);
+                    vorout.push(pt);
+                }
+                delete p;
+                return;
+            }
+            var l;
+            var ct = circles;
+            for(var i=0 ; i<ct.length ; i++){
+                for(var j=i+1 ; j<ct.length ; j++){
+                    if( (ct[i].a == ct[j].a && ct[i].b == ct[j].b) || (ct[i].a == ct[j].a && ct[i].c == ct[j].c) ||
+                        (ct[i].a == ct[j].a && ct[i].b == ct[j].c) || (ct[i].a == ct[j].a && ct[i].c == ct[j].b) ||
+                        (ct[i].a == ct[j].b && ct[i].b == ct[j].c) || (ct[i].a == ct[j].b && ct[i].c == ct[j].c) ||
+                        (ct[i].b == ct[j].a && ct[i].c == ct[j].b) || (ct[i].b == ct[j].a && ct[i].c == ct[j].c) ||
+                        (ct[i].b == ct[j].b && ct[i].c == ct[j].c)){
+                        l = new line(i , j);
+                        vorl.push(l);
+                    }
+                }
+            }
+            var p = new point(0 , 0);
+            var x , y;
+            var flag = false;
+            var tp = 0;
+            var ch = conv.length;
+            for(var i=0 ; i<ch ; i++){
+                for(var j=0 ; j<ct.length ; j++){
+                    if( (conv[i] == ct[j].a && conv[(i+1)%ch] == ct[j].b) ||
+                        (conv[i] == ct[j].a && conv[(i+1)%ch] == ct[j].c) ||
+                        (conv[i] == ct[j].b && conv[(i+1)%ch] == ct[j].a) ||
+                        (conv[i] == ct[j].b && conv[(i+1)%ch] == ct[j].c) ||
+                        (conv[i] == ct[j].c && conv[(i+1)%ch] == ct[j].a) ||
+                        (conv[i] == ct[j].c && conv[(i+1)%ch] == ct[j].b)
+                    ){
+                        p = new point(0 , 0);
+                        p.x = (pts[conv[i]].x + pts[conv[(i+1)%ch]].x)/2;
+                        p.y = (pts[conv[i]].y + pts[conv[(i+1)%ch]].y)/2;
+                        x = ct[j].o.x - p.x;
+                        y = ct[j].o.y - p.y;
+                        if(CCW(pts[conv[i]],pts[conv[(i+1)%ch]],ct[j].o)>0){x = -x;y = -y;}
+                        while(p.x>0 && p.x<canvas.offsetWidth && p.y>0 && p.y<canvas.offsetHeight){
+                            p.x += x*4; p.y += y*4;
+                        }
+                        vorout.push(ct[j].o);
+                        vorout.push(p);
+                    }
+                }
+            }
+        }
+
+    </script>
+    <script type="text/javascript">
+        var draw_vor = true , draw_del = true , draw_cir = false;
+        var nearestPoint = false , mustUpdate = false;
+        var ctx , pts = new Array();
+        var floatPoint = false , mouseTrack = false;
+        var lastPoint = new point(0 , 0);
+        function onStart(){
+            var canvas = document.getElementById("display");
+            canvas.onmousedown = mouseHandle;
+            canvas.onmousemove = mouseMove;
+            ctx = canvas.getContext("2d");
+            generateRandom();
+        }
+
+        function mouseHandle(e){
+            var canvas = document.getElementById("display");
+            var Obj = canvas;
+            var x =0, y =0;
+            do{
+                x += Obj.offsetLeft;
+                y += Obj.offsetTop;
+            }while(Obj = Obj.offsetParent);
+            x = e.pageX - x;
+            y = e.pageY - y;
+
+            if( x<0 || x>canvas.width || y<0 || y>canvas.height)return;
+            if(mouseTrack){
+                if(floatPoint)pts.pop();
+                floatPoint = false;
+            }
+            var p = new point(x , y);
+            if(addToShape(p)){
+                reDraw();
+            }
+        }
+        function mouseMove(e){
+            if(!mouseTrack && !nearestPoint)return;
+            var Obj = document.getElementById("display");
+            var x =0, y =0;
+            do{
+                x += Obj.offsetLeft;
+                y += Obj.offsetTop;
+            }while(Obj = Obj.offsetParent);
+            x = e.pageX - x;
+            y = e.pageY - y;
+            if(mouseTrack){
+                if(floatPoint)pts.pop();
+                var l = new point(x , y);
+                if(addToShape(l)){
+                    floatPoint = true;
+                    reDraw();
+                }else floatPoint = false;
+            }else if(nearestPoint){
+                lastPoint.x = x;
+                lastPoint.y = y;
+                reDraw();
+            }
+        }
+        function addToShape(p){
+            for(var i=0 ; i<pts.length ; i++)if(pts[i].x==p.x && pts[i].y==p.y)return false;
+            pts.push(p);
+            mustUpdate = true;
+            return true;
+        }
+        function Draw(){
+            cls();
+            if(pts.length==1){
+                drawPoint(pts[0]);
+                var d =distance(pts[0] , lastPoint);
+                drawPoint(lastPoint);
+                ctx.fillStyle = "rgba(255 , 144 , 100 , .5);";
+                ctx.beginPath();
+                ctx.arc(lastPoint.x , lastPoint.y , d , 0 , 2*Math.PI , false);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = "red";
+                drawLine(lastPoint , pts[0]);
+                return;
+            }
+            if(draw_cir){
+                ctx.strokeStyle = "#e65338";
+                for(var i=0 ; i<circles.length ; i++)
+                    drawCircle(circles[i]);
+            }
+            if(draw_vor){
+                ctx.strokeStyle = "#d5aa30";
+                for(var i=0 ; i<vorl.length ; i++)drawLine(circles[vorl[i].a].o , circles[vorl[i].b].o);
+                for(var i=0 ; i<vorout.length ; i+=2)drawLine(vorout[i] , vorout[i+1]);
+            }
+            if(draw_del){
+                ctx.strokeStyle = lineColor;
+                for(var i=0 ; i<lines.length ; i++)drawLine(pts[lines[i].a] ,pts[lines[i].b]);
+            }
+            for(var i=0 ; i<pts.length ; i++)drawPoint(pts[i]);
+            if(draw_cir){
+                pointColor = "#7fff00";
+                for(var i=0 ; i<circles.length ; i++)drawPoint(circles[i].o);
+                pointColor = "#ff1493";
+            }
+            if(nearestPoint){
+                var m =0 , d =distance(pts[0] , lastPoint);
+                var D =0;
+                for(var i=1 ; i<pts.length ; i++){
+                    D = distance(pts[i],lastPoint);
+                    if(D<d){m = i;d = D;}
+                }
+                drawPoint(lastPoint);
+                ctx.fillStyle = "rgba(255 , 144 , 100 , .5);";
+                ctx.beginPath();
+                ctx.arc(lastPoint.x , lastPoint.y , d , 0 , 2*Math.PI , false);
+                ctx.closePath();
+                ctx.fill();
+                ctx.strokeStyle = "red";
+                drawLine(lastPoint , pts[m]);
+            }
+        }
+        function reDraw(){
+            if(mustUpdate){
+                Delaunay();
+                voronoi();
+                mustUpdate = false;
+            }
+            Draw();
+        }
+
+        function generateRandom(){
+            var n = document.getElementById("random").value;
+            var canvas = document.getElementById("display");
+            var w = canvas.offsetWidth , h = canvas.height;
+            var x = 0 , y = 0;
+            var l;
+            for(var i=0 ; i<n ; i++){
+                x = Math.ceil(50+Math.random()*(w-100));
+                y = Math.ceil(50+Math.random()*(h-100));
+                l = new point(x , y);
+                addToShape(l);
+            }
+            reDraw();
+        }
+
+        function resetShape(){
+            floatPoint = false;
+            while(pts.length)pts.pop();
+            while(lines.length)lines.pop();
+            while(circles.length)circles.pop();
+            while(vorl.length)vorl.pop();
+            while(vorout.length)vorout.pop();
+            cls();
+        }
+
+    </script>
+    <script type="text/javascript">
+
+        function checkCheck(){
+            if(floatPoint){
+                pts.pop();
+                floatPoint = false;
+            }
+            var C = document.getElementById("cir") , V = document.getElementById("vor");
+            var D = document.getElementById("del") , T = document.getElementById("trk");
+            var c = C.checked , v = V.checked , d = D.checked , t = T.checked;
+            if(!(c || v || d)){
+                V.checked = true;
+                v = true;
+            }
+            if(t)mustUpdate = true;
+            draw_cir = c;draw_del = d;draw_vor = v;
+            mouseTrack = t;
+            reDraw();
+        }
+        function nearUpdate(){
+            var C = document.getElementById("cir") , N = document.getElementById("nrp");
+            var T = document.getElementById("trk");
+            if(N.disabled)N.checked = false;
+            else if(N.checked){
+                C.checked = false;
+                C.disabled = true;
+                T.checked = false;
+                T.disabled = true;
+                nearestPoint = true;
+            }else{
+                C.disabled = false;
+                T.disabled = false;
+            }
+            nearestPoint = N.checked;
+            checkCheck();
+        }
+        function cirUpdate(){
+            var t = document.getElementById("trk") , n = document.getElementById("nrp") , c = document.getElementById("cir");
+            if(c.disabled)c.checked = false;
+            else if(c.checked || t.checked){
+                n.disabled = true;
+                n.checked = false;
+            }else{
+                n.disabled = false;
+            }
+            checkCheck();
+        }
+        function trkUpdate(){
+            var t = document.getElementById("trk") , n = document.getElementById("nrp") , c = document.getElementById("cir");
+            if(t.disabled)t.checked = false;
+            else if(t.checked || c.checked){
+                n.disabled = true;
+                n.checked = false;
+            }else{
+                n.disabled = false;
+            }
+            if(!t.checked)mustUpdate = true;
+            checkCheck();
+        }
+    </script>
+</head>
+<body onload="onStart()">
+<div class="sidePanel" style="float:left;margin-left:0px;position: fixed; ;margin-top: 10px;width: 200;">
+<form name="voronoi" style="margin: 10px;text-align: left;float: left">
+    <input type="button" class="btn" id="resetDiag" value="Reset" onclick="resetShape();" style="width:100px;"><br/><br/>
+    <input type="number" id="random" value="3" maxlength="4" size="1" style="width: 45px;">
+    <input type="button" class="btn" id="addRandom" value="Add to diagram" onclick="generateRandom()" style="width:100px;"><br/><br/>
+    <div class="chbox" onclick="var c=document.getElementById('vor');c.checked=!c.checked;checkCheck();"><input type="checkbox" id="vor" checked="checked" value="Voronoi Diagram">Voronoi Diagram</div>
+    <div class="chbox" onclick="var c=document.getElementById('del');c.checked=!c.checked;checkCheck();"><input type="checkbox" id="del" checked="checked">Dleaunay Triangulation</div>
+    <div class="chbox" onclick="var c=document.getElementById('cir');c.checked=!c.checked;cirUpdate();"><input type="checkbox" id="cir">Circle</div>
+    <div class="chbox" onclick="var c=document.getElementById('trk');c.checked=!c.checked;trkUpdate();"><input type="checkbox" id="trk">Mouse Track</div>
+    <div class="chbox" onclick="var c=document.getElementById('nrp');c.checked=!c.checked;nearUpdate();"><input type="checkbox" id="nrp">Nearest Point</div>
+</form>
+</div>
+<div class="canvas">
+<canvas height="600" width="920" id="display">Your browser is too old , Please update to newer version</canvas>
+</div>
+<div align="center">
+Designed and developed by Kazem Keshavarz ( KeyKaKiTO on WWW network ).
+<a href="https://github.com/KeyKaKiTO/voronoi">GitHub Repository</a>
+</body>
+</html>
